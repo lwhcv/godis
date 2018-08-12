@@ -17,6 +17,12 @@ var port = flag.String("port", "9999", "port")
 var stringObject = &server.StringObj{}
 var hashObject = &server.HashObj{}
 
+
+var Objects = map[int]interface{}{
+	server.STRING:stringObject,
+	server.HASH:hashObject,
+}
+
 type Resp struct {
 	Data   interface{} `json:"data"`
 	Status int    `json:"status"`
@@ -24,6 +30,7 @@ type Resp struct {
 
 func main() {
 	flag.Parse()
+	server.InitLogger()
 	// listen
 	l, err := net.Listen("tcp", *host+":"+*port)
 	if err != nil {
@@ -34,7 +41,13 @@ func main() {
 
 	fmt.Println("Listening on " + *host + ":" + *port)
 
+	// 根据配置来载入数据 1.aof, 2 .rdb
+	server.LoadDataFromFile()
+
+	go server.Cron(Objects)
+
 	for {
+		// 使用epoll等
 		// accept client
 		conn, err := l.Accept()
 		if err != nil {
@@ -73,7 +86,7 @@ func handleRequest(conn net.Conn) {
 		fmt.Println(arrData)
 
 		ret,err := ExecCommand(arrData)
-		fmt.Println(stringObject)
+		fmt.Println(stringObject.Data["test"])
 		fmt.Println(ret)
 		if err != nil {
 			ret = err.Error()
@@ -84,7 +97,6 @@ func handleRequest(conn net.Conn) {
 			Data:  ret,
 			Status: 200,
 		}
-
 		r, _ := json.Marshal(resp)
 
 		writer.Write(r)
@@ -97,8 +109,8 @@ func ExecCommand(args []string) (interface{}, error) {
 	if len(args) < 1 {
 		return nil, server.CommandInvalid
 	}
-	command := args[0]
-	command = strings.ToUpper(args[0])
+
+	command := strings.ToUpper(args[0])
 	objType := 0
 	if _,ok := server.StringObjCommand[command]; ok {
 		objType = server.STRING
